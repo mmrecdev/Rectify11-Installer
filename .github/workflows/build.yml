@@ -2,13 +2,14 @@ name: mros
 
 on:
   push:
-    branches: [ main ] # Changed from 'master' to 'main' (modern Git convention)
+    branches: [ main ]
   pull_request:
     branches: [ main ]
   workflow_run:
     workflows: ["Submodules Sync"]
     types:
       - completed
+  workflow_dispatch: # Added manual trigger
 
 jobs:
   build:
@@ -17,10 +18,10 @@ jobs:
       NUGET_CERT_REVOCATION_MODE: offline
     steps:
     # Step 1: Checkout code with submodules and LFS
-    - uses: actions/checkout@v4 # Updated to latest version
+    - uses: actions/checkout@v4
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        submodules: recursive # Ensures submodules are fully initialized
+        submodules: recursive
         lfs: true
 
     # Step 2: Post-initialization - Validate submodules and project structure
@@ -54,15 +55,14 @@ jobs:
     # Step 4: Pre-build - Install additional tools (e.g., for icon processing)
     - name: Install Resource Extraction Tools
       run: |
-        # Example: Install a tool like 7-Zip for .mun file extraction (if needed)
         choco install 7zip -y
         Write-Output "Installed 7-Zip for resource extraction."
 
     # Step 5: Add MSBuild to PATH
     - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v2 # Updated to latest version
+      uses: microsoft/setup-msbuild@v2
       with:
-        msbuild-architecture: x64 # Explicitly set for consistency
+        msbuild-architecture: x64
 
     # Step 6: Restore NuGet Packages
     - name: Restore NuGet Packages
@@ -81,10 +81,10 @@ jobs:
     # Step 9: Create single executable with ILRepack
     - name: Create Single Executable
       run: |
-        # Ensure ILRepack is available (assumed to be in the project or installed)
         .\mrosInstaller\ILRepack.exe `
           .\mrosInstaller\bin\Release\mrosInstaller.exe `
           /out:.\mrosInstaller\bin\output\Release\mrosInstaller.exe `
+(via PowerShell) `
           .\mrosInstaller\bin\Release\libmsstyle.dll `
           .\mrosInstaller\bin\Release\TaskDialog.dll
         if ($LASTEXITCODE -ne 0) {
@@ -92,10 +92,9 @@ jobs:
           exit 1
         }
 
-    # Step 10: Post-build - Validate Windows 12-style theming resources
+    # Step 10: Post-build - Validate Windows 12-Style Theming
     - name: Validate Windows 12-Style Theming
       run: |
-        # Placeholder: Check for modern theming resources (e.g., Fluent Design icons)
         $outputExe = ".\mrosInstaller\bin\output\Release\mrosInstaller.exe"
         if (!(Test-Path -Path $outputExe)) {
           Write-Error "mrosInstaller.exe not found!"
@@ -105,9 +104,8 @@ jobs:
 
     # Step 11: Upload mros Installer artifact
     - name: Upload mros Installer
-      uses: actions/upload-artifact@v4 # Updated to latest version
+      uses: actions/upload-artifact@v4
       with:
         name: mrosInstaller (x64)
         path: .\mrosInstaller\bin\output\Release\mrosInstaller.exe
-        if-no-files-found: error # Fail if artifact is missing
-        
+        if-no-files-found: error
