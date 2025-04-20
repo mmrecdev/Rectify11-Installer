@@ -17,13 +17,6 @@ jobs:
     env:
       NUGET_CERT_REVOCATION_MODE: offline
     steps:
-    # Step 1: Single checkout with submodules (includes RectifyControlPanel2 and dui70)
-    - uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        submodules: recursive # Fetches RectifyControlPanel2 and its dui70 submodule
-        lfs: true
-
     # Step 2: Validate project structure
     - name: Validate Project Structure
       run: |
