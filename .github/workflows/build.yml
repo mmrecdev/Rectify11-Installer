@@ -1,54 +1,81 @@
-name: Build Rectify11
+name: mros
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ] # Updated to 'main' (modern Git convention)
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
   workflow_run:
     workflows: ["Submodules Sync"]
     types:
       - completed
+  workflow_dispatch: # Added manual trigger
 
 jobs:
   build:
     runs-on: windows-latest
     env:
       NUGET_CERT_REVOCATION_MODE: offline
-
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-        with: 
-          token: ${{ secrets.GITHUB_TOKEN }}
-          submodules: true
-          lfs: true
+    # Step 1: Single checkout with submodules and LFS
+    - uses: actions/checkout@v4 # Updated to latest version
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        submodules: recursive # Efficient submodule handling
+        lfs: true
 
-      - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v1.1.3
+    # Step 2: Add MSBuild to PATH
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v2 # Updated to latest version
+      with:
+        msbuild-architecture: x64 # Explicitly set for consistency
 
-      - name: Restore NuGet Packages
-        run: |
-          nuget restore Rectify11Installer.sln
-          nuget restore Rectify11ControlCenter\Rectify11ControlCenter.sln
+    # Step 3: Validate system DLLs for icon resources
+    - name: Validate System DLLs for Theming
+      run: |
+        $shell32Path = "C:\Windows\System32\shell32.dll"
+        $imageresPath = "C:\Windows\System32\imageres.dll"
+        if (!(Test-Path -Path $shell32Path)) {
+          Write-Error "shell32.dll not found!"
+          exit 1
+        }
+        if (!(Test-Path -Path $imageresPath)) {
+          Write-Error "imageres.dll not found!"
+          exit 1
+        }
+        Write-Output "System DLLs (shell32.dll, imageres.dll) validated for icon extraction."
 
-      - name: Build Rectify11 Control Center
-        run: msbuild Rectify11ControlCenter\Rectify11ControlCenter.sln /p:Configuration=Release
+    # Step 4: Restore NuGet Packages
+    - name: Restore NuGet Packages
+      run: |
+        nuget restore mrosInstaller.sln
+        nuget restore mrosControlCenter\mrosControlCenter.sln
 
-      - name: Build Rectify11 Installer
-        run: msbuild Rectify11Installer.sln /p:Configuration=Release /p:Platform=x64
+    # Step 5: Build mros Control Center
+    - name: Build mros Control Center
+      run: msbuild mrosControlCenter\mrosControlCenter.sln /p:Configuration=Release /p:Platform=x64
 
-      - name: Create Single EXE (using ILRepack)
-        run: |
-          mkdir Rectify11Installer\bin\output\Release
-          Rectify11Installer\ILRepack.exe \
-            Rectify11Installer\bin\Release\Rectify11Installer.exe \
-            /out:Rectify11Installer\bin\output\Release\Rectify11Installer.exe \
-            Rectify11Installer\bin\Release\libmsstyle.dll \
-            Rectify11Installer\bin\Release\TaskDialog.dll
+    # Step 6: Build mros Installer
+    - name: Build mros Installer
+      run: msbuild mrosInstaller.sln /p:Configuration=Release /p:Platform=x64
 
-      - name: Upload Rectify11 Installer Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Rectify11Installer (x64)
-          path: Rectify11Installer\bin\output\Release\Rectify11Installer.exe
+    # Step 7: Create single executable with ILRepack
+    - name: Create Single Executable
+      run: |
+        .\mrosInstaller\ILRepack.exe `
+          .\mrosInstaller\bin\Release\mrosInstaller.exe `
+          /out:.\mrosInstaller\bin\output\Release\mrosInstaller.exe `
+          .\mrosInstaller\bin\Release\libmsstyle.dll `
+          .\mrosInstaller\bin\Release\TaskDialog.dll
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "ILRepack failed!"
+          exit 1
+        }
+
+    # Step 8: Upload mros Installer artifact
+    - name: Upload mros Installer
+      uses: actions/upload-artifact@v4 # Updated to latest version
+      with:
+        name: mrosInstaller (x64)
+        path: .\mrosInstaller\bin\output\Release\mrosInstaller.exe
+        if-no-files-found: error # Fail if artifact is missing
