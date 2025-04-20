@@ -2,14 +2,14 @@ name: mros
 
 on:
   push:
-    branches: [ main ] # Updated to 'main' (modern Git convention)
+    branches: [ main ]
   pull_request:
     branches: [ main ]
   workflow_run:
     workflows: ["Submodules Sync"]
     types:
       - completed
-  workflow_dispatch: # Added manual trigger
+  workflow_dispatch:
 
 jobs:
   build:
@@ -17,20 +17,27 @@ jobs:
     env:
       NUGET_CERT_REVOCATION_MODE: offline
     steps:
-    # Step 1: Single checkout with submodules and LFS
-    - uses: actions/checkout@v4 # Updated to latest version
+    # Step 1: Single checkout with submodules (includes RectifyControlPanel2 and dui70)
+    - uses: actions/checkout@v4
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        submodules: recursive # Efficient submodule handling
+        submodules: recursive # Fetches RectifyControlPanel2 and its dui70 submodule
         lfs: true
 
-    # Step 2: Add MSBuild to PATH
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v2 # Updated to latest version
-      with:
-        msbuild-architecture: x64 # Explicitly set for consistency
+    # Step 2: Validate project structure
+    - name: Validate Project Structure
+      run: |
+        if (!(Test-Path -Path "mrosInstaller\mrosInstaller.sln")) {
+          Write-Error "mrosInstaller.sln not found!"
+          exit 1
+        }
+        if (!(Test-Path -Path "RectifyControlPanel2\rectify11cpl.sln")) {
+          Write-Error "rectify11cpl.sln not found in RectifyControlPanel2!"
+          exit 1
+        }
+        Write-Output "Project structure validated."
 
-    # Step 3: Validate system DLLs for icon resources
+    # Step 3: Validate system DLLs for theming
     - name: Validate System DLLs for Theming
       run: |
         $shell32Path = "C:\Windows\System32\shell32.dll"
@@ -45,21 +52,27 @@ jobs:
         }
         Write-Output "System DLLs (shell32.dll, imageres.dll) validated for icon extraction."
 
-    # Step 4: Restore NuGet Packages
+    # Step 4: Add MSBuild to PATH
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v2
+      with:
+        msbuild-architecture: x64
+
+    # Step 5: Restore NuGet Packages
     - name: Restore NuGet Packages
       run: |
         nuget restore mrosInstaller.sln
-        nuget restore mrosControlCenter\mrosControlCenter.sln
+        nuget restore RectifyControlPanel2\rectify11cpl.sln
 
-    # Step 5: Build mros Control Center
-    - name: Build mros Control Center
-      run: msbuild mrosControlCenter\mrosControlCenter.sln /p:Configuration=Release /p:Platform=x64
+    # Step 6: Build Rectify Control Panel
+    - name: Build Rectify Control Panel
+      run: msbuild RectifyControlPanel2\rectify11cpl.sln /p:Configuration=Release /p:Platform=x64
 
-    # Step 6: Build mros Installer
+    # Step 7: Build mros Installer
     - name: Build mros Installer
       run: msbuild mrosInstaller.sln /p:Configuration=Release /p:Platform=x64
 
-    # Step 7: Create single executable with ILRepack
+    # Step 8: Create single executable with ILRepack
     - name: Create Single Executable
       run: |
         .\mrosInstaller\ILRepack.exe `
@@ -72,10 +85,10 @@ jobs:
           exit 1
         }
 
-    # Step 8: Upload mros Installer artifact
+    # Step 9: Upload mros Installer artifact
     - name: Upload mros Installer
-      uses: actions/upload-artifact@v4 # Updated to latest version
+      uses: actions/upload-artifact@v4
       with:
         name: mrosInstaller (x64)
         path: .\mrosInstaller\bin\output\Release\mrosInstaller.exe
-        if-no-files-found: error # Fail if artifact is missing
+        if-no-files-found: error
